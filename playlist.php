@@ -6,26 +6,62 @@ require_once ('scripts/helpfuncties.php');
 $sqlMijnPlayList = "SELECT playlistid, titel FROM savedplaylist s 
 INNER JOIN playlist p ON s.playlistid = p.idplaylist";
 
- //QUERY VOOR TONEN VAN AL MIJN BEWAARDE SONGS
- $sqlLijstSongs = "SELECT s.idsongs, s.title, s.duur, a.naam, cd.cdtitel, ss.date as toegevoegd
- FROM savedsongs ss INNER JOIN song s ON ss.songid = s.idsongs INNER JOIN artiest a ON s.artistid = a.idartiest INNER JOIN songopcd soc ON s.idsongs = soc.songid INNER JOIN cd ON soc.cdid = cd.idcd";
+//alle info over de playlist zelf, een query met 1 resultaat dus!
+$sqlInfoplaylist = "SELECT titel, omschrijving, afbeelding, createdby, (SELECT sum( duur)
+FROM song s INNER JOIN songsopplaylist sp ON s.idsongs = sp.idsong
+WHERE idplaylist = ?) as duur,(SELECT count( duur)
+FROM song s INNER JOIN songsopplaylist sp ON s.idsongs = sp.idsong
+WHERE idplaylist = ?) as aantal
+FROM playlist
+WHERE idplaylist = ?";
+
+//query om de juiste songs van de gekozen playlist te tonen
+$sqlSongsplaylist = "SELECT title, duur, naam, cdtitel, sp.toegevoegd, s.idsongs
+FROM songsopplaylist sp INNER JOIN song s ON sp.idsong = s.idsongs INNER JOIN artiest a ON s.artistid = a.idartiest INNER JOIN songopcd soc ON s.idsongs = soc.songid INNER JOIN cd cd ON soc.cdid = cd.idcd
+WHERE idplaylist = ?";
 
 //query van mijn playlist uitvoeren om in NAV te plaatsen
 if (!$resNAVMijnplaylists = $mysqli->query($sqlMijnPlayList)){
     echo "Oeps, een query foutje op DB voor opzoeken eigen playlist";
     print("<p>Error: " . $mysqli->error . "</p>");
     exit();
+
 }
 
-//query van mijn bewaarde songs uitvoeren om in centrum te plaatsen
-if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
-    echo "Oeps, een query foutje op DB voor opzoeken mijn songs";
-    print("<p>Error: " . $mysqli->error . "</p>");
-    exit();
+//verwerking voor info van gekozen playlist
+if(isset($_GET['idplaylist'])) {
+    $gekozenID = $_GET['idplaylist'];
 }
+else{
+    $gekozenID = -1;
+}
+
+$stmtInfo = $mysqli->prepare($sqlInfoplaylist);
+    
+//parameters koppelen
+$stmtInfo->bind_param("iii", $parID1, $parID2, $parID3);
+$parID1 = $gekozenID;
+$parID2 = $gekozenID;
+$parID3 = $gekozenID;
+
+//query uitvoeren
+$stmtInfo->execute();
+
+//voer de query en haal het ENIGE resultaat op en stop het in resultinfo
+$resultInfo = $stmtInfo->get_result();
+
+//we hebben geen lus nodig, het is voldoende de eerste rij te vragen
+$rowinfoplaylist = $resultInfo->fetch_assoc();
+
+
+//VERWERKING van SONGS op de gekozen playlist
+$stmtSongs = $mysqli->prepare($sqlSongsplaylist);
+$stmtSongs->bind_param("i", $parID1);
+$stmtSongs->execute();
+$resultSongs = $stmtSongs->get_result();
+//alle songs zitten nu in resultsongs (verschillende rijen), dus straks lus om uit te lezen
 
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -42,7 +78,7 @@ if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
   <body class="container-fluid h-100">
     <div id="container" class="row h-100">
       <aside class="col-2 h-100">
-        <nav>
+      <nav>
           <ul class="list-unstyled">
             <li><a href="browse.php">Browse</a></li>
             <li><a href="#">Radio</a></li>
@@ -53,7 +89,7 @@ if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
           <ul class="list-unstyled">
             <li><a href="#">Your daily mix</a></li>
             <li><a href="#">Recent played</a></li>
-            <li class="active"><a href="song.php">Songs</a></li>
+            <li ><a href="song.php">Songs</a></li>
             <li ><a href="#">Albums</a></li>
             <li><a href="#">Artists</a></li>
             <li><a href="#">Stations</a></li>
@@ -63,16 +99,33 @@ if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
           <h1>playlist</h1>
           <ul class="list-unstyled">
             <?php
+
+            //verwerking voor info van gekozen playlist
+                if(isset($_GET['idplaylist'])) {
+                    $gekozenID = $_GET['idplaylist'];
+                }
+                else{
+                    $gekozenID = -1;
+                }
             //ophalen van het resultaat van de query
             //doorlopen van het resultaat zolang er rijen zijn
             while ($row = $resNAVMijnplaylists->fetch_assoc()) {
                 //opvullen tijdelijke var
                 $tempId = $row['playlistid'];
                 $tempTitel = $row['titel'];
-                
-                //gebruiken van var om rij van LI te maken
-                print('<li><a href="playlist.php?idplaylist=' . $tempId . '">' . $tempTitel .'</a></li>');
 
+                if($tempId==$gekozenID){
+                    //gebruiken van var om rij van LI te maken
+                    print('<li class="active"><a href="playlist.php?idplaylist=' . $tempId . '">' . $tempTitel .'</a></li>');
+
+                }
+                else {
+                     //gebruiken van var om rij van LI te maken
+                     print('<li><a href="playlist.php?idplaylist=' . $tempId . '">' . $tempTitel .'</a></li>');
+
+                }
+                
+                
             }
             
             ?>
@@ -100,18 +153,36 @@ if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
         <section class="row" id="content">
           <header class="col-12">
             <div class="row">
-              <div class="col-12">
-                <div class="type"><h1>Saved songs</h1></div>
+              <div class="col-2" id="content-cover">
+                <img src="images/playlist/<?php print($rowinfoplaylist['afbeelding']); ?>" alt="album cover" class="img-fluid" />
+              </div>
+              <div class="col-10" id="content-info">
+                <div class="type">PLAYLIST</div>
+                <h1><?php print($rowinfoplaylist['titel']); ?></h1>
+                <p><?php print($rowinfoplaylist['omschrijving']); ?></p>
+                <p>Created by <span class="author"><?php print($rowinfoplaylist['createdby']); ?></span> <i class="fas fa-circle"></i> <?php print($rowinfoplaylist['aantal']); ?> songs, <?php print(sec_naar_tijd($rowinfoplaylist['duur'])); ?></p>
               </div>
               <div class="col-6" id="content-actions">
                 <a class="btn solid" href="#">Play</a>
                 <a class="btn" href="#">Following</a>
                 <a class="btn more" href="#"><i class="fas fa-ellipsis-h"></i></a>
               </div>
-              <div class="col-6 text-right" id="content-followers">xxxx aantal followers</div>
+              <div class="col-6" id="content-followers">xxxx aantal followers</div>
             </div>
           </header>
-          
+          <div class="col-12 scrolledsmall">
+            <div class="row">
+              <div class="col-1">
+                <img src="images/placeholder.png" class="img-fluid" alt="Huidig album" />
+              </div>
+              <div class="col-6"><h1>omschrijving</h1></div>
+              <div class="col-5 text-right">
+                <a class="btn solid" href="#">Play</a>
+                <a class="btn" href="#">Following</a>
+                <a class="btn more" href="#"><i class="fas fa-ellipsis-h"></i></a>
+              </div>
+            </div>
+          </div>
           <section class="col-12 tabelview" id="bevat">
             <div class="row">
               <!--hier stond de articles-->
@@ -129,31 +200,31 @@ if (!$resLijstSongs = $mysqli->query($sqlLijstSongs)){
                   </tr>
                 </thead>
                 <tbody>
-                <?php
-                while ($row = $resLijstSongs->fetch_assoc()) {
+                    <?php
+                    while($row=$resultSongs->fetch_assoc()) {
+                        
+                        $tempTitel = $row['title'];
+                        $tempArtist = $row['naam'];
+                        $tempAlbum = $row['cdtitel'];
+                        $tempToegevoegd = $row['toegevoegd'];
+                        $tempDuur = sec_naar_tijd($row['duur']);
+                        $tempSongid = $row['idsongs'];
 
-                    $tempTitel = $row['title'];
-                    $tempArtist = $row['naam'];
-                    $tempAlbum = $row['cdtitel'];
-                    $tempToegevoegd = $row['toegevoegd'];
-                    $tempDuur = sec_naar_tijd($row['duur']);
-                    $tempSongid = $row['idsongs'];
-
-                    print('<tr>');
-                    print('<td class="play_status"><i class="fas fa-volume-up"></i> <i class="far fa-play-circle"></i><i class="far fa-pause-circle"></i></td>');
-                    //De check dient om eventueel een liedje van de saved songs te wissen
-                    print('<td><a href="songs_remove.php?idsong=' . $tempSongid . '"><i class="fas fa-check"></i></a></td>');
-                    print('<td>' . $tempTitel . '</td>');
-                    print('<td>' . $tempArtist . '</td>');
-                    print('<td>' . $tempAlbum . '</td>');
-                    print('<td>' . $tempToegevoegd . '</td>');
-                    print('<td><i class="fas fa-ellipsis-h"></i></td>');
-                    print('<td>' . $tempDuur .'</td>');
-                    print('</tr>');
-                }
-
-                ?>
-
+                        print('<tr>');
+                        print('<td class="play_status"><i class="fas fa-volume-up"></i> <i class="far fa-play-circle"></i><i class="far fa-pause-circle"></i></td>');
+                        //De plus dient om eventueel een liedje aan de saved songs toe te voegen
+                        print('<td><a href="songs_add.php?idsong=' . $tempSongid . '"><i class="fas fa-plus"></i></a></td>');
+                        print('<td>' . $tempTitel . '</td>');
+                        print('<td>' . $tempArtist . '</td>');
+                        print('<td>' . $tempAlbum . '</td>');
+                        print('<td>' . $tempToegevoegd . '</td>');
+                        print('<td><i class="fas fa-ellipsis-h"></i></td>');
+                        print('<td>' . $tempDuur .'</td>');
+                        print('</tr>');
+                    }
+                    ?>
+                 
+                  
                 </tbody>
               </table>
             </div>

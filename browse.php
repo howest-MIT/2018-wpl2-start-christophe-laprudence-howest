@@ -43,9 +43,9 @@ if (!$resBrowselijst = $mysqli->query($sqlBrowselijst)){
   <body class="container-fluid h-100">
     <div id="container" class="row h-100">
       <aside class="col-2 h-100">
-        <nav>
+      <nav>
           <ul class="list-unstyled">
-            <li><a href="#">Browse</a></li>
+            <li class="active"><a href="browse.php">Browse</a></li>
             <li><a href="#">Radio</a></li>
           </ul>
         </nav>
@@ -54,8 +54,8 @@ if (!$resBrowselijst = $mysqli->query($sqlBrowselijst)){
           <ul class="list-unstyled">
             <li><a href="#">Your daily mix</a></li>
             <li><a href="#">Recent played</a></li>
-            <li><a href="#">Songs</a></li>
-            <li class="active"><a href="#">Albums</a></li>
+            <li><a href="song.php">Songs</a></li>
+            <li><a href="#">Albums</a></li>
             <li><a href="#">Artists</a></li>
             <li><a href="#">Stations</a></li>
           </ul>
